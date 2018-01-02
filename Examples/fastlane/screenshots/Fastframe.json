@@ -1,0 +1,38 @@
+{
+    "devices" : {
+        "X" : {
+            "frame" : "Apple iPhone X Black.png",
+            "padding" : "-100"
+        },
+        "iPhone" : {
+            "frame" : "Apple iPhone 7 Plus Silver.png",
+            "padding" : "-100"
+        },
+        "iPad" : {
+            "frame" : "Apple iPad Pro Silver.png",
+            "padding" : "0"
+        }
+    },
+    "background" : {
+        "color" : "#ffffff",
+        "endcolor" : "#ffffff"
+    },
+    "keyword" : {
+        "font" : {
+            "name" : ".HelveticaNeueDeskInterface-Bold",
+            "size" : "0.0",
+            "color" : "#171717"
+        },
+        "multiline" : false,
+        "padding" : "20"
+    },
+    "title" : {
+        "font" : {
+            "name" : ".HelveticaNeueDeskInterface-Light",
+            "size" : "0.0",
+            "color" : "#000000"
+        },
+        "multiline" : true,
+        "padding" : "0"
+    }
+}
