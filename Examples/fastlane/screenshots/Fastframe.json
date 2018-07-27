@@ -1,38 +1,30 @@
 {
     "devices" : {
         "X" : {
-            "frame" : "Apple iPhone X Black.png",
-            "padding" : "-100"
+            "frame" : "Apple iPhone X Space Grey.png",
+            "padding" : "-230"
         },
         "iPhone" : {
-            "frame" : "Apple iPhone 7 Plus Silver.png",
-            "padding" : "-100"
+            "frame" : "Apple iPhone 8 Plus Space Grey.png",
+            "padding" : "-180",
         },
         "iPad" : {
-            "frame" : "Apple iPad Pro Silver.png",
-            "padding" : "0"
+            "frame" : "Apple iPad Pro Space Gray.png",
+            "padding" : "-100",
+			"keyword.strings" : "keyword-ipad.strings"
         }
     },
+	"keyword.strings" : {
+		"font" : {
+			"name" : "Seravek-Bold",
+			"size" : "0.0",
+			"color" : "#ffffff"
+		},
+		"multiline" : false,
+		"padding" : "5%"
+	},
     "background" : {
-        "color" : "#ffffff",
-        "endcolor" : "#ffffff"
+        "color" : "#01a0ff",
+        "endcolor" : "#4de8f4"
     },
-    "keyword" : {
-        "font" : {
-            "name" : ".HelveticaNeueDeskInterface-Bold",
-            "size" : "0.0",
-            "color" : "#171717"
-        },
-        "multiline" : false,
-        "padding" : "20"
-    },
-    "title" : {
-        "font" : {
-            "name" : ".HelveticaNeueDeskInterface-Light",
-            "size" : "0.0",
-            "color" : "#000000"
-        },
-        "multiline" : true,
-        "padding" : "0"
-    }
 }
