@@ -168,7 +168,7 @@ NSRect invertRect(NSRect bounds, CGRect rect) {
 
 CGImageRef frameScreenshot(NSString* screenshot, CGImageRef image) {
     NSString* deviceFrame = findFrame(screenshot);
-    if ( !deviceFrame ) return image;
+    if ( !deviceFrame ) return NULL;
 
     CGImageRef frameImage = nil;
     NSString* framePath = [[_configPath stringByAppendingPathComponent:configDevices] stringByAppendingPathComponent:deviceFrame];
@@ -234,7 +234,8 @@ void drawBackground(CGContextRef ctx, CGSize imageSize) {
 }
 
 void drawDevice(CGContextRef ctx, CGRect rect, CGSize imageSize, CGImageRef image) {
-    CGRect aspectRect = AVMakeRectWithAspectRatioInsideRect(imageSize, rect);
+    CGSize theImageSize = {CGImageGetWidth(image), CGImageGetHeight(image)};
+    CGRect aspectRect = AVMakeRectWithAspectRatioInsideRect(theImageSize, rect);
     CGContextDrawImage(ctx, invertRect(rect, aspectRect), image);
 }
 
@@ -367,6 +368,11 @@ CGFloat drawText(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString
 
 void processScreenshot(NSString* screenshot) {
     NSData* imageData = [NSData dataWithContentsOfFile:screenshot];
+    if ( !imageData ) {
+        NSLog(@"Can't load screenshot from \"%@\"", screenshot);
+        return;
+    }
+    
     CGImageRef image = [[NSBitmapImageRep alloc] initWithData:imageData].CGImage;
     if ( !image ) {
         NSLog(@"Can't load screenshot from \"%@\"", screenshot);
@@ -406,10 +412,16 @@ void processScreenshot(NSString* screenshot) {
 //    rect = CGRectInset(rect, ceil(imageSize.width * 0.05), ceil(imageSize.height * 0.05));
     
     // draw text (this func will make rect smaller by the space taken by the text)
-    CGFloat textOffset = drawText(ctx, rect, keywordFile, screenshot, 128.0, 192.0, 2);
+    CGFloat textOffset = drawText(ctx, rect, keywordFile, screenshot, 92.0, 192.0, 3);
     rect = CGRectOffset(rect, 0, textOffset);
     
     // draw device (+frame)
+    
+    // add padding?
+    NSDictionary* devices = _config[devicesKey];
+    NSNumber* padding = devices[findDeviceName(screenshot)][paddingKey];
+    rect = CGRectOffset(rect, 0.0, padding.floatValue);
+    
     drawDevice(ctx, rect, imageSize, framedImage ?: image);
     if ( framedImage ) CGImageRelease(framedImage);
     
