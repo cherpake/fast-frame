@@ -215,9 +215,11 @@ CGImageRef frameScreenshot(NSString* screenshot, CGImageRef image) {
 void drawBackground(CGContextRef ctx, CGSize imageSize) {
     NSColor* background = [NSColor whiteColor];
     NSColor* endBackground = [NSColor whiteColor];
+    
+    NSString* backgroundForSize = [NSString stringWithFormat:@"%@.%.0f", backgroundKey, imageSize.height];
 
-    NSString* bgColor = _config[backgroundKey][colorKey];
-    NSString* endBgColor = _config[backgroundKey][endColorKey];
+    NSString* bgColor = _config[backgroundForSize][colorKey] ?: _config[backgroundKey][colorKey];
+    NSString* endBgColor = _config[backgroundForSize][endColorKey] ?: _config[backgroundKey][endColorKey];
 
     if ( bgColor ) background = colorFromHexString(bgColor);
     if ( endBgColor ) endBackground = colorFromHexString(endBgColor);
@@ -233,13 +235,34 @@ void drawBackground(CGContextRef ctx, CGSize imageSize) {
     CGContextDrawLinearGradient(ctx, grad, CGPointMake(CGRectGetMidX(imageRect), imageSize.height), CGPointMake(CGRectGetMidX(imageRect), 0.0),  0);
 }
 
-void drawDevice(CGContextRef ctx, CGRect rect, CGSize imageSize, CGImageRef image) {
+CGFloat drawDevice(CGContextRef ctx, CGRect rect, CGSize imageSize, CGImageRef image, BOOL center) {
     CGSize theImageSize = {CGImageGetWidth(image), CGImageGetHeight(image)};
     CGRect aspectRect = AVMakeRectWithAspectRatioInsideRect(theImageSize, rect);
-    CGContextDrawImage(ctx, invertRect(rect, aspectRect), image);
+    // let's calculate real height OK
+    CGRect real = aspectRect;
+    while (true) {
+        CGRect ar = AVMakeRectWithAspectRatioInsideRect(theImageSize, real);
+        if (ar.size.height > aspectRect.size.height && ar.size.width == aspectRect.size.width) {
+            real.size.height -= 1.0;
+        } else {
+            if (center) {
+                aspectRect.origin.y = (rect.size.height - real.size.height) / 2.0;
+            }
+            break;
+        }
+    }
+    
+    CGContextSetShadowWithColor(ctx, CGSizeZero, 100.0, NSColor.blackColor.CGColor);
+    CGRect imgRect = invertRect(rect, aspectRect);
+    
+//    CGContextSetRGBFillColor(ctx, 0x0A/255.0, 0x8E/255.0, 0xCA/255.0, 0.75);
+//    CGContextFillRect(ctx, imgRect);
+
+    CGContextDrawImage(ctx, imgRect, image);
+    return imgRect.size.height;
 }
 
-CGFloat drawText(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString* screenshot, CGFloat minSize, CGFloat maxSize, NSInteger maxLines) {
+CGFloat drawTextOptinal(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString* screenshot, CGFloat minSize, CGFloat maxSize, NSInteger maxLines, BOOL doDraw) {
     NSString* fontName = _config[textFileKey][fontKey][nameKey];
     NSString* configTextColor = _config[textFileKey][fontKey][colorKey];
     NSString* configFontSize =  _config[textFileKey][fontKey][sizeKey];
@@ -276,25 +299,27 @@ CGFloat drawText(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString
         autoFontSize = YES;
     }
 
+    NSColor* textColor = configTextColor != nil ? colorFromHexString(configTextColor) : [NSColor whiteColor];
+
     // text attr
     NSShadow* shadow = [NSShadow new];
-    shadow.shadowBlurRadius = 5.0;
-    shadow.shadowColor = [NSColor blackColor];
+    shadow.shadowBlurRadius = 10.0;
+    shadow.shadowColor = [NSColor blackColor];// colorWithAlphaComponent:0.5];
     NSMutableParagraphStyle *style = [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
     [style setLineBreakMode:NSLineBreakByWordWrapping];
     [style setAlignment:NSTextAlignmentCenter];
-    NSColor* textColor = configTextColor != nil ? colorFromHexString(configTextColor) : [NSColor whiteColor];
     
     // make our text attr and if needed adjust font size based on min, max size and # of lines
     NSDictionary* attr;
     CGFloat numberOfLines = 0;
     CGSize biggestTextSize;
     do {
+//        NSLog(@"Trying font size: %f", fontSize);
         NSFont* font = [NSFont fontWithName:fontName size:fontSize];
         NSDictionary* oneLineAttr = @{NSFontAttributeName : font,
                                NSShadowAttributeName : shadow,
                                NSForegroundColorAttributeName : textColor,
-                               NSKernAttributeName: @-0.3};
+                               NSKernAttributeName: @-2.0};
         
         // oneline size
         CGSize oneLineSize = [allText.firstObject boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)
@@ -302,6 +327,11 @@ CGFloat drawText(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString
                                                             attributes:oneLineAttr].size;
         
         NSMutableDictionary* multilineAttr = [oneLineAttr mutableCopy];
+
+        style.lineSpacing = 0.5;
+        style.minimumLineHeight = 1.0;
+        style.maximumLineHeight = fontSize;
+
         [multilineAttr addEntriesFromDictionary:@{NSParagraphStyleAttributeName: style}];
         
         // multiline size - have to go over all strings to measure the longest
@@ -323,6 +353,24 @@ CGFloat drawText(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString
         attr = multilineAttr;
         // reduce font size for next loop
         fontSize -= 1.0;
+        
+        // let's check if we wrapping some words in the middle here
+        BOOL breakingWords = NO;
+        for ( NSString* string in allText ) {
+            NSArray* words = [string componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+            for ( NSString* word in words ) {
+                CGSize wordSize = [word boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)
+                                                     options:NSStringDrawingUsesLineFragmentOrigin
+                                                  attributes:oneLineAttr].size;
+                if ( wordSize.width > rect.size.width ) {
+                    breakingWords = YES;
+                    break;
+                }
+            }
+        }
+        if ( breakingWords ) {
+            continue;
+        }
 
         // basically what we want is to have:
         // biggest text in one line or max # lines
@@ -331,21 +379,30 @@ CGFloat drawText(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString
             // here we should continue with the loop
             // cause we have more than max # of lines
             continue;
-        }
-        if ( fontSize > minSize ) {
-            // here we can continue cause our font is still
-            // bigger than min allowed font size
-            continue;
         } else {
-            // if we got here we reached our min font size
-            // and we have smallest font size allowed...
             break;
         }
+//        if ( fontSize > minSize ) {
+//            // here we can continue cause our font is still
+//            // bigger than min allowed font size
+//            continue;
+//        } else {
+//            // if we got here we reached our min font size
+//            // and we have smallest font size allowed...
+//            break;
+//        }
     } while (autoFontSize);
-    NSLog(@"Selected font size of %f", fontSize);
+//    NSLog(@"Selected font size of %f", fontSize);
     
     // find our current text
     NSString* text = findText(screenshot, textFile);
+    
+    // if we don't have text let's just return 0
+    // so our device frame will be centred?
+    if ( text.length == 0 ) {
+        return 0;
+    }
+    
     CGSize textSize = [text boundingRectWithSize:rect.size
                                          options:NSStringDrawingUsesLineFragmentOrigin
                                       attributes:attr].size;
@@ -358,12 +415,30 @@ CGFloat drawText(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString
     textRect.size = textSize;
     textRect.origin.x = floor((CGRectGetMaxX(_rect) - textSize.width) / 2.0);
     textRect.origin.y += yOffset;
-    NSRect drawRect = invertRect(NSRectFromCGRect(_rect), textRect);
-    [text drawInRect:drawRect withAttributes:attr];
+    
+    NSRect drawRect;
+    drawRect.origin.x = textRect.origin.x;
+    drawRect.origin.y = yOffset;
+    drawRect.size.width = textRect.size.width;
+    drawRect.size.height = textSize.height;
+
+
+    NSLog(@"Draw rect: %@", NSStringFromRect(drawRect));
+    if ( doDraw ) {
+//                CGContextSetRGBFillColor(ctx, 0x0D/255.0, 0x83/255.0, 0xAC/255.0, 0.75);
+//                CGContextFillRect(ctx, drawRect);
+        [text drawInRect:drawRect withAttributes:attr];
+    }
 
     // we take our original rect, and calculate padding +
     // text size add add our y offset to level device in screenshots
-    return (CGRectGetMinY(rect) - CGRectGetMinY(_rect)) + textSize.height + yOffset * 2.0;
+    CGFloat th = /*(CGRectGetMinY(rect) - CGRectGetMinY(_rect)) +*/ textSize.height + yOffset * 2.0;
+    NSLog(@"Text height is %f for %@ with font %f (drawing: %d)", th, text, fontSize, doDraw);
+    return th;
+}
+
+CGFloat drawText(CGContextRef ctx, CGRect _rect, NSString* textFileKey, NSString* screenshot, CGFloat minSize, CGFloat maxSize, NSInteger maxLines) {
+    return drawTextOptinal(ctx, _rect, textFileKey, screenshot, minSize, maxSize, maxLines, YES);
 }
 
 void processScreenshot(NSString* screenshot) {
@@ -409,27 +484,60 @@ void processScreenshot(NSString* screenshot) {
     
     // our content rect
     CGRect rect = CGRectMake(0, 0, imageSize.width, imageSize.height);
-//    rect = CGRectInset(rect, ceil(imageSize.width * 0.05), ceil(imageSize.height * 0.05));
-    
-    // draw text (this func will make rect smaller by the space taken by the text)
-    CGFloat textOffset = drawText(ctx, rect, keywordFile, screenshot, 92.0, 192.0, 3);
-    rect = CGRectOffset(rect, 0, textOffset);
-    
-    // draw device (+frame)
     
     // add padding?
     NSDictionary* devices = _config[devicesKey];
     NSNumber* padding = devices[findDeviceName(screenshot)][paddingKey];
     rect = CGRectOffset(rect, 0.0, padding.floatValue);
+
+///////////////////////////////////////
+/******* Text then screenshot ********/
+///////////////////////////////////////
+////    rect = CGRectInset(rect, ceil(imageSize.width * 0.05), ceil(imageSize.height * 0.05));
+//
+//    // draw text (this func will make rect smaller by the space taken by the text)
+//    CGFloat textOffset = drawText(ctx, rect, keywordFile, screenshot, 92.0, 172.0, 2);
+//
+//#if 1
+//    rect = CGRectOffset(rect, 0, textOffset);
+//    if ( textOffset == 0.0 ) {
+//        NSLog(@"No text for this screenshot");
+//    }
+//#endif
+//
+//#if 0
+//    CGFloat realTextOffset = textOffset;
+//    textOffset = 0.0;
+//#endif
+//
+//    drawDevice(ctx, rect, imageSize, framedImage ?: image, textOffset == 0.0);
+//    if ( framedImage ) CGImageRelease(framedImage);
+//
+//#if 0
+//    CGRect rectangle = CGRectMake(0, imageSize.height - realTextOffset, imageSize.width, realTextOffset);
+//    CGContextSetRGBFillColor(ctx, 0x0D/255.0, 0x83/255.0, 0xAC/255.0, 0.75);
+//    CGContextFillRect(ctx, rectangle);
+//
+//    drawText(ctx, rect, keywordFile, screenshot, 92.0, 172.0, 2);
+//#endif
+
+    ///////////////////////////////////////
+    /******* Screenshot then text ********/
+    ///////////////////////////////////////
+
+    CGFloat textHeight = drawTextOptinal(ctx, rect, keywordFile, screenshot, 92.0, 172.0, 2, NO);
+    CGRect drawingRect = CGRectOffset(rect, 0, -textHeight);
+    drawDevice(ctx, drawingRect, imageSize, framedImage ?: image, textHeight == 0.0);
+    drawText(ctx, rect, keywordFile, screenshot, 92.0, 172.0, 2);
     
-    drawDevice(ctx, rect, imageSize, framedImage ?: image);
     if ( framedImage ) CGImageRelease(framedImage);
+
     
     // save
     NSString* uuid = [[NSUUID UUID].UUIDString lowercaseString];
     NSString* framedName = [[screenshot stringByDeletingPathExtension] stringByAppendingFormat:@"_%@_framed.jpg", uuid];
     NSData* framed = [offscreenRep representationUsingType:NSBitmapImageFileTypeJPEG
-                                                properties:@{NSImageCompressionFactor : @0.8}];
+                                                properties:@{NSImageCompressionFactor : @1.0}];
     [framed writeToFile:framedName atomically:YES];
 
     [NSGraphicsContext restoreGraphicsState];
@@ -437,7 +545,7 @@ void processScreenshot(NSString* screenshot) {
 
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
-//        NSLog(@"%@", [[[NSFontManager sharedFontManager] availableFonts] componentsJoinedByString:@"\n"]);
+        NSLog(@"%@", [[[NSFontManager sharedFontManager] availableFonts] componentsJoinedByString:@"\n"]);
         
         _path = [[NSFileManager defaultManager] currentDirectoryPath];
         if (!loadConfig()) return -1;

@@ -1,0 +1,34 @@
+{
+    "devices" : {
+        "iPhone" : {
+            "frame" : "Apple iPhone 7 Plus Jet Black.png",
+            "padding" : "-100"
+        },
+        "iPad" : {
+            "frame" : "Apple iPad Pro Space Gray.png",
+            "padding" : "0"
+        }
+    },
+    "background" : {
+        "color" : "#efefef",
+        "endcolor" : "#afafaf"
+    },
+    "keyword" : {
+        "font" : {
+            "name" : "HPSimplifiedW02-Regular",
+            "size" : "0.0",
+            "color" : "#000000"
+        },
+        "multiline" : false,
+        "padding" : "50"
+    },
+    "title" : {
+        "font" : {
+            "name" : "HPSimplifiedW02-Light",
+            "size" : "0.0",
+            "color" : "#000000"
+        },
+        "multiline" : true,
+        "padding" : "50"
+    }
+}
